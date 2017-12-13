@@ -1,0 +1,17 @@
+*/derby.log
+
+.idea
+target
+
+
+*.scss.cache
+
+
+# Ignores compiled TypeScript files
+rsi-analytics/**/*.js
+rsi-analytics/**/*.map
+rsi-analytics/server/static
+data-pro-lab/**/*.js
+data-pro-lab/**/*.map
+data-pro-lab/server/static
+
