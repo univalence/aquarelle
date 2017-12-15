@@ -1,6 +1,6 @@
 package models
 
-import java.net.{InetAddress, UnknownHostException}
+import java.net.{ InetAddress, UnknownHostException }
 import java.time.Instant
 import java.util.UUID
 import java.util.UUID.fromString
@@ -38,11 +38,11 @@ object EventFormat {
 
 sealed trait Environment {
   def shortname = this match {
-    case Production ⇒ "prod"
-    case Integration ⇒ "int"
+    case Production        ⇒ "prod"
+    case Integration       ⇒ "int"
     case RecetteTransverse ⇒ "rect"
-    case Recette ⇒ "rec"
-    case Local ⇒ "local"
+    case Recette           ⇒ "rec"
+    case Local             ⇒ "local"
   }
 }
 
@@ -55,10 +55,10 @@ object Environment {
 
   def fromShortname(env: String): Environment = {
     env match {
-      case "prod" ⇒ Production
-      case "rec" ⇒ Recette
-      case "rect" ⇒ RecetteTransverse
-      case "int" ⇒ Integration
+      case "prod"  ⇒ Production
+      case "rec"   ⇒ Recette
+      case "rect"  ⇒ RecetteTransverse
+      case "int"   ⇒ Integration
       case "local" ⇒ Local
     }
   }
@@ -79,7 +79,6 @@ object Environment {
 
 trait NewTracing
 
-
 object Tracing {
   @deprecated
   type TracingContext = Tracing
@@ -98,12 +97,12 @@ object Tracing {
 }
 
 case class Tracing(
-                    trace_id: String = Tracing.newId(),
-                    parent_span_id: Option[String] = None,
-                    previous_span_id: Option[String] = None,
-                    span_id: String = Tracing.newId(),
-                    on_behalf_of: Option[String] = None
-                  ) {
+  trace_id:         String         = Tracing.newId(),
+  parent_span_id:   Option[String] = None,
+  previous_span_id: Option[String] = None,
+  span_id:          String         = Tracing.newId(),
+  on_behalf_of:     Option[String] = None
+) {
   def getTraceId = Option(trace_id)
 
   def getParentSpanId: Option[String] = parent_span_id
@@ -166,7 +165,7 @@ object CCUtils {
       val pair = {
         f.get(ref) match {
           case Some(v: String) ⇒ Map(f.getName -> v)
-          case None ⇒ Map.empty
+          case None            ⇒ Map.empty
           case Some(subref: AnyRef) ⇒ {
             val subMap = getCCParams2(subref)
             subMap.map(sm ⇒ f.getName + "." + sm._1 -> sm._2)
@@ -181,18 +180,18 @@ object CCUtils {
 }
 
 case class EventMetadata(
-                          event_id: UUID,
-                          event_type: String, //models.eventmetadata
-                          event_format: EventFormat,
-                          trace_id: Option[String],
-                          parent_span_id: Option[String],
-                          previous_span_id: Option[String],
-                          span_id: Option[String],
-                          node_id: UUID,
-                          env: Environment,
-                          callsite: Option[Callsite],
-                          on_behalf_of: Option[String]
-                        ) {
+  event_id:         UUID,
+  event_type:       String, //models.eventmetadata
+  event_format:     EventFormat,
+  trace_id:         Option[String],
+  parent_span_id:   Option[String],
+  previous_span_id: Option[String],
+  span_id:          Option[String],
+  node_id:          UUID,
+  env:              Environment,
+  callsite:         Option[Callsite],
+  on_behalf_of:     Option[String]
+) {
 
   def getTracing: Tracing = {
     trace_id.map(t ⇒ Tracing(trace_id = t, span_id = span_id.getOrElse(Tracing.newId()),
@@ -266,17 +265,17 @@ object Event {
 }
 
 case class StartedNewNode(
-                           node_id: UUID,
-                           startup_inst: Instant,
-                           environment: Environment,
-                           prg_name: String,
-                           prg_organization: String,
-                           prg_version: String,
-                           prg_commit: String,
-                           prg_buildAt: Instant,
-                           node_hostname: String,
-                           more: Map[String, String]
-                         ) extends Event
+  node_id:          UUID,
+  startup_inst:     Instant,
+  environment:      Environment,
+  prg_name:         String,
+  prg_organization: String,
+  prg_version:      String,
+  prg_commit:       String,
+  prg_buildAt:      Instant,
+  node_hostname:    String,
+  more:             Map[String, String]
+) extends Event
 
 case class BuildInfo(name: String, organization: String, version: String, commit: String, buildAt: Instant)
 
@@ -309,8 +308,8 @@ object StartedNewNode {
 }
 
 case class StoppedNode(
-                        node_id: UUID,
-                        stop_inst: Instant,
-                        cause: String,
-                        more: Map[String, String]
-                      ) extends Event
+  node_id:   UUID,
+  stop_inst: Instant,
+  cause:     String,
+  more:      Map[String, String]
+) extends Event
