@@ -86,7 +86,7 @@ class NodeContext(
   def saveEvent[E <: Event](
     event:    E,
     event_id: UUID = UUID.randomUUID()
-  )(implicit tracingContext: TracingContext, callsite: Callsite): Future[Unit] = {
+  )(implicit tracingContext: Tracing, callsite: Callsite): Future[Unit] = {
 
     val json = EventSerde.toJson(event)
     publishRaw(json.payload.getBytes, "data.event." + environment.shortname, EventFormat.CCJson, event_type = json.event_type, event_id)
@@ -99,7 +99,7 @@ class NodeContext(
     event_type:   String,
     event_id:     UUID           = UUID.randomUUID(),
     key:          Option[String] = None
-  )(implicit tracingContext: TracingContext, callsite: Callsite): Future[Unit] = {
+  )(implicit tracingContext: Tracing, callsite: Callsite): Future[Unit] = {
 
     val meta = EventMetadata(
       event_id = event_id,

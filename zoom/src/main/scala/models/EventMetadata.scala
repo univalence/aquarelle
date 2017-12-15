@@ -1,10 +1,10 @@
 package models
 
-import java.net.{ InetAddress, UnknownHostException }
-
+import java.net.{InetAddress, UnknownHostException}
 import java.time.Instant
-import java.util.{ Calendar, UUID }
+import java.util.UUID
 import java.util.UUID.fromString
+
 import models.Environment._
 import models.EventSerde.ToJson
 import models.macros._
@@ -12,7 +12,6 @@ import shapeless.tag
 import shapeless.tag.@@
 //import utils.Utils._
 
-import scala.concurrent.duration._
 import scala.util.Try
 
 sealed trait EventFormat
@@ -39,11 +38,11 @@ object EventFormat {
 
 sealed trait Environment {
   def shortname = this match {
-    case Production        ⇒ "prod"
-    case Integration       ⇒ "int"
+    case Production ⇒ "prod"
+    case Integration ⇒ "int"
     case RecetteTransverse ⇒ "rect"
-    case Recette           ⇒ "rec"
-    case Local             ⇒ "local"
+    case Recette ⇒ "rec"
+    case Local ⇒ "local"
   }
 }
 
@@ -56,10 +55,10 @@ object Environment {
 
   def fromShortname(env: String): Environment = {
     env match {
-      case "prod"  ⇒ Production
-      case "rec"   ⇒ Recette
-      case "rect"  ⇒ RecetteTransverse
-      case "int"   ⇒ Integration
+      case "prod" ⇒ Production
+      case "rec" ⇒ Recette
+      case "rect" ⇒ RecetteTransverse
+      case "int" ⇒ Integration
       case "local" ⇒ Local
     }
   }
@@ -80,24 +79,11 @@ object Environment {
 
 trait NewTracing
 
-sealed trait TracingContext {
-  def getTraceId: Option[String]
-
-  def getParentSpanId: Option[String]
-
-  def getPreviousSpanId: Option[String]
-
-  def getOnBehalfOf: Option[String]
-
-  def getSpanId: Option[String]
-
-  def newChild: TracingContext @@ NewTracing
-
-  def newFollowFrom: TracingContext @@ NewTracing
-
-}
 
 object Tracing {
+  @deprecated
+  type TracingContext = Tracing
+
   def newId(): String = UUID.randomUUID().toString
 
   def toTracing(tracingContext: TracingContext): Tracing = {
@@ -112,12 +98,12 @@ object Tracing {
 }
 
 case class Tracing(
-  trace_id:         String         = Tracing.newId(),
-  parent_span_id:   Option[String] = None,
-  previous_span_id: Option[String] = None,
-  span_id:          String         = Tracing.newId(),
-  on_behalf_of:     Option[String] = None
-) extends TracingContext {
+                    trace_id: String = Tracing.newId(),
+                    parent_span_id: Option[String] = None,
+                    previous_span_id: Option[String] = None,
+                    span_id: String = Tracing.newId(),
+                    on_behalf_of: Option[String] = None
+                  ) {
   def getTraceId = Option(trace_id)
 
   def getParentSpanId: Option[String] = parent_span_id
@@ -126,7 +112,7 @@ case class Tracing(
 
   def getSpanId: Option[String] = Option(span_id)
 
-  def getOnBehalfOf = on_behalf_of
+  def getOnBehalfOf: Option[String] = on_behalf_of
 
   def toTracing: Tracing = Tracing(
     trace_id = getTraceId.getOrElse(""),
@@ -135,20 +121,22 @@ case class Tracing(
     span_id = getSpanId.getOrElse("")
   )
 
-  override def newChild: @@[Tracing, NewTracing] =
+  def newChild: @@[Tracing, NewTracing] =
     tag[NewTracing](this.copy(parent_span_id = getSpanId, span_id = UUID.randomUUID().toString))
 
-  override def newFollowFrom: @@[Tracing, NewTracing] =
+  def newFollowFrom: @@[Tracing, NewTracing] =
     tag[NewTracing](this.copy(previous_span_id = getSpanId, span_id = UUID.randomUUID().toString))
 }
 
 object CCUtils {
 
+  /*
   def toMapSS(cc: AnyRef with Product): Seq[(String, String)] = {
     //toMapSSWithF(cc,{case _ if false => Nil})
     ???
-  }
+  }*/
 
+  /*
   def toMapSSWithF(cc: AnyRef with Product, ext: PartialFunction[(String, Any), Seq[(String, String)]]): Seq[(String, String)] = {
     //    val res:Seq[(String,String)] = cc.getClass.getDeclaredFields.map(_.getName) // all field names
     //      .zip(cc.productIterator.toSeq).flatMap(x => {
@@ -162,7 +150,7 @@ object CCUtils {
     //    res
     Nil
 
-  }
+  }*/
 
   private def rekey(str: String) = {
     str.map(s ⇒ {
@@ -178,7 +166,7 @@ object CCUtils {
       val pair = {
         f.get(ref) match {
           case Some(v: String) ⇒ Map(f.getName -> v)
-          case None            ⇒ Map.empty
+          case None ⇒ Map.empty
           case Some(subref: AnyRef) ⇒ {
             val subMap = getCCParams2(subref)
             subMap.map(sm ⇒ f.getName + "." + sm._1 -> sm._2)
@@ -193,20 +181,20 @@ object CCUtils {
 }
 
 case class EventMetadata(
-  event_id:         UUID,
-  event_type:       String, //models.eventmetadata
-  event_format:     EventFormat,
-  trace_id:         Option[String],
-  parent_span_id:   Option[String],
-  previous_span_id: Option[String],
-  span_id:          Option[String],
-  node_id:          UUID,
-  env:              Environment,
-  callsite:         Option[Callsite],
-  on_behalf_of:     Option[String]
-) {
+                          event_id: UUID,
+                          event_type: String, //models.eventmetadata
+                          event_format: EventFormat,
+                          trace_id: Option[String],
+                          parent_span_id: Option[String],
+                          previous_span_id: Option[String],
+                          span_id: Option[String],
+                          node_id: UUID,
+                          env: Environment,
+                          callsite: Option[Callsite],
+                          on_behalf_of: Option[String]
+                        ) {
 
-  def getTracing: TracingContext = {
+  def getTracing: Tracing = {
     trace_id.map(t ⇒ Tracing(trace_id = t, span_id = span_id.getOrElse(Tracing.newId()),
       parent_span_id = parent_span_id, previous_span_id = previous_span_id)).getOrElse(
       //Calcul de la trace à partir de l'id de l'event
@@ -215,12 +203,13 @@ case class EventMetadata(
 
   }
 
+  /*
   private def getCCParams: Map[String, String] = {
     CCUtils.toMapSSWithF(this, {
       case (k, Some(cs: Callsite)) ⇒
         CCUtils.toMapSS(cs).map({ case (k2, v) ⇒ (k + "." + k2, v) })
     }).toMap
-  }
+  }*/
 
   def toStringMap: Map[String, String] = {
     CCUtils.getCCParams2(this)
@@ -277,17 +266,17 @@ object Event {
 }
 
 case class StartedNewNode(
-  node_id:          UUID,
-  startup_inst:     Instant,
-  environment:      Environment,
-  prg_name:         String,
-  prg_organization: String,
-  prg_version:      String,
-  prg_commit:       String,
-  prg_buildAt:      Instant,
-  node_hostname:    String,
-  more:             Map[String, String]
-) extends Event
+                           node_id: UUID,
+                           startup_inst: Instant,
+                           environment: Environment,
+                           prg_name: String,
+                           prg_organization: String,
+                           prg_version: String,
+                           prg_commit: String,
+                           prg_buildAt: Instant,
+                           node_hostname: String,
+                           more: Map[String, String]
+                         ) extends Event
 
 case class BuildInfo(name: String, organization: String, version: String, commit: String, buildAt: Instant)
 
@@ -320,8 +309,8 @@ object StartedNewNode {
 }
 
 case class StoppedNode(
-  node_id:   UUID,
-  stop_inst: Instant,
-  cause:     String,
-  more:      Map[String, String]
-) extends Event
+                        node_id: UUID,
+                        stop_inst: Instant,
+                        cause: String,
+                        more: Map[String, String]
+                      ) extends Event
