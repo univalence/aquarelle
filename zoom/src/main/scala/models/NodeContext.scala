@@ -25,24 +25,41 @@ object KafkaConfiguration {
 
 }
 
-trait Logger {
-  def info(message: ⇒ String)(implicit tracingContext: TracingContext, callSite: Callsite): Unit
-
-  def warn(message: ⇒ String)(implicit tracingContext: TracingContext, callSite: Callsite): Unit
-
-  def fatal(message: ⇒ String)(implicit tracingContext: TracingContext, callSite: Callsite): Unit
-
-  def error(message: ⇒ String)(implicit tracingContext: TracingContext, callSite: Callsite): Unit
-
-  def debug(message: ⇒ String)(implicit tracingContext: TracingContext, callSite: Callsite): Unit
+trait LoggerWithCtx[Context] {
+  def info(message: ⇒ String)(implicit context: Context): Unit
+  def warn(message: ⇒ String)(implicit context: Context): Unit
+  def fatal(message: ⇒ String)(implicit context: Context): Unit
+  def error(message: ⇒ String)(implicit context: Context): Unit
+  def debug(message: ⇒ String)(implicit context: Context): Unit
 }
+
+trait LoggerImplWithCtx[Context] extends LoggerWithCtx[Context] {
+  def log(message: ⇒ String, level: String)(implicit context: Context): Unit
+
+  final override def info(message: ⇒ String)(implicit context: Context): Unit = log(message, "info")
+  final override def warn(message: ⇒ String)(implicit context: Context): Unit = log(message, "warn")
+  final override def fatal(message: ⇒ String)(implicit context: Context): Unit = log(message, "fatal")
+  final override def error(message: ⇒ String)(implicit context: Context): Unit = log(message, "error")
+  final override def debug(message: ⇒ String)(implicit context: Context): Unit = log(message, "debug")
+}
+
+case class TracingAndCallSite(implicit val tracing: Tracing, implicit val callsite: Callsite)
+
+object TracingAndCallSite {
+  implicit def fromTracingAndCallSite(implicit tracing: Tracing, callsite: Callsite): TracingAndCallSite = TracingAndCallSite()
+}
+
+trait Logger extends LoggerWithCtx[TracingAndCallSite]
+
+trait NodeLogger extends LoggerWithCtx[Callsite]
 
 case class NodeInfo(node_id: UUID)
 
 class NodeContext(
   val environment:    Environment,
   private val nodeId: UUID               = UUID.randomUUID(),
-  kafkaConfiguration: KafkaConfiguration = KafkaConfiguration.defaultKafkaConfiguration
+  kafkaConfiguration: KafkaConfiguration = KafkaConfiguration.defaultKafkaConfiguration,
+  nodeTracingContext: Tracing            = Tracing()
 )(implicit buildInfo: BuildInfo) extends Serializable {
 
   //tochange
@@ -61,7 +78,7 @@ class NodeContext(
   }
 
   private def start(): Unit = {
-    saveEvent(StartedNewNode.fromBuild(buildInfo, environment, nodeId))(Tracing(), Callsite.callSite)
+    saveEvent(StartedNewNode.fromBuild(buildInfo, environment, nodeId))(nodeTracingContext, Callsite.callSite)
   }
 
   start()
@@ -113,27 +130,32 @@ class NodeContext(
 
   }
 
-  def getLogger(context: Class[_]): Logger = new Logger {
-    private def log(message: ⇒ String, level: String)(implicit tracingContext: TracingContext, callsite: Callsite): Unit = {
+  def getLogger(logClass: Class[_]): Logger = new LoggerImplWithCtx[TracingAndCallSite] with Logger {
+    override def log(message: ⇒ String, level: String)(implicit context: TracingAndCallSite): Unit = {
+      import context._
       println(s"**$level : $message")
       publishRaw(
         content = message.getBytes,
         topic = "logs." + environment.shortname,
         event_format = EventFormat.Raw,
-        event_type = s"logs/$level/" + context.getName,
+        event_type = s"logs/$level/" + logClass.getName,
         key = Some(nodeId.toString)
       )
     }
+  }
 
-    override def error(message: ⇒ String)(implicit tracingContext: TracingContext, callSite: Callsite): Unit = log(message, "error")
+  def getNodeLogger: NodeLogger = new NodeLogger with LoggerImplWithCtx[Callsite] {
+    override def log(message: ⇒ String, level: String)(implicit context: Callsite): Unit = {
+      implicit val t = nodeTracingContext
+      publishRaw(
+        content = message.getBytes,
+        topic = "logs." + environment.shortname,
+        event_format = EventFormat.Raw,
+        event_type = s"logs/$level/" + this.getClass.getName,
+        key = Some(nodeId.toString)
+      )
 
-    override def fatal(message: ⇒ String)(implicit tracingContext: TracingContext, callSite: Callsite): Unit = log(message, "fatal")
-
-    override def warn(message: ⇒ String)(implicit tracingContext: TracingContext, callSite: Callsite): Unit = log(message, "warn")
-
-    override def info(message: ⇒ String)(implicit tracingContext: TracingContext, callSite: Callsite): Unit = log(message, "info")
-
-    override def debug(message: ⇒ String)(implicit tracingContext: TracingContext, callSite: Callsite): Unit = log(message, "debug")
+    }
   }
 
 }
