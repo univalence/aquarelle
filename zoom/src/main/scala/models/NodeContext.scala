@@ -20,9 +20,7 @@ case class KafkaConfiguration(
 )
 
 object KafkaConfiguration {
-
   def defaultKafkaConfiguration: KafkaConfiguration = new KafkaConfiguration(9092)
-
 }
 
 trait LoggerWithCtx[Context] {
@@ -33,7 +31,7 @@ trait LoggerWithCtx[Context] {
   def debug(message: ⇒ String)(implicit context: Context): Unit
 }
 
-trait LoggerImplWithCtx[Context] extends LoggerWithCtx[Context] {
+private trait LoggerImplWithCtx[Context] extends LoggerWithCtx[Context] {
   def log(message: ⇒ String, level: String)(implicit context: Context): Unit
 
   final override def info(message: ⇒ String)(implicit context: Context): Unit = log(message, "info")
