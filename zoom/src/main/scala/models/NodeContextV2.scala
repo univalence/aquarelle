@@ -86,7 +86,8 @@ class NodeContextV2[Event] private(
   @deprecated(message = "should specify group")
   @deprecated(message = "use the smart factory")
   def this(environment: Environment)(implicit buildInfo: BuildInfo) = {
-    this(environment = environment,
+    this(group = "data",
+      environment = environment,
       buildInfo = buildInfo,
       topicStrategy = OutTopics.oldStrategy,
       eventSer = NCSer.tgEventSerde)
