@@ -15,9 +15,13 @@ import scala.concurrent.Future
 
 case class KafkaConfiguration(
   kafkaPort:                Int,
+  kafkaHost:String = "trafgar01t.bbo1t.local",
   customBrokerProperties:   Map[String, String] = Map.empty,
   customProducerProperties: Map[String, String] = Map.empty
-)
+) {
+
+  def kafkaBrokers = s"$kafkaHost:$kafkaPort"
+}
 
 object KafkaConfiguration {
   def defaultKafkaConfiguration: KafkaConfiguration = new KafkaConfiguration(9092)
@@ -60,8 +64,8 @@ class NodeContext(
   nodeTracingContext: Tracing            = Tracing()
 )(implicit buildInfo: BuildInfo) extends Serializable {
 
-  //tochange
-  val kafkaBrokers = s"trafgar01t.bbo1t.local:9092"
+  //tochangea
+  val kafkaBrokers: String = kafkaConfiguration.kafkaHost + ":" + kafkaConfiguration.kafkaPort
 
   def baseProducerConfig: Map[String, Object] = Map[String, Object](
     ProducerConfig.BOOTSTRAP_SERVERS_CONFIG -> kafkaBrokers,
@@ -152,7 +156,6 @@ class NodeContext(
         event_type = s"logs/$level/" + this.getClass.getName,
         key = Some(nodeId.toString)
       )
-
     }
   }
 
