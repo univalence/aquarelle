@@ -6,7 +6,7 @@ import java.util.UUID
 import java.util.UUID.fromString
 
 import models.Environment._
-import models.EventSerde.ToJson
+import models.ZoomEventSerde.ToJson
 import models.macros._
 import shapeless.tag
 import shapeless.tag.@@
@@ -164,6 +164,7 @@ object CCUtils {
 
       val pair = {
         f.get(ref) match {
+          case Seq()           ⇒ Map.empty
           case Some(v: String) ⇒ Map(f.getName -> v)
           case None            ⇒ Map.empty
           case Some(subref: AnyRef) ⇒ {
@@ -187,6 +188,7 @@ case class EventMetadata(
   parent_span_id:   Option[String],
   previous_span_id: Option[String],
   span_id:          Option[String],
+  source_ids:       Seq[(Option[String], String)] = Vector.empty,
   node_id:          UUID,
   env:              Environment,
   callsite:         Option[Callsite],
@@ -201,14 +203,6 @@ case class EventMetadata(
     )
 
   }
-
-  /*
-  private def getCCParams: Map[String, String] = {
-    CCUtils.toMapSSWithF(this, {
-      case (k, Some(cs: Callsite)) ⇒
-        CCUtils.toMapSS(cs).map({ case (k2, v) ⇒ (k + "." + k2, v) })
-    }).toMap
-  }*/
 
   def toStringMap: Map[String, String] = {
     CCUtils.getCCParams2(this)
@@ -247,21 +241,7 @@ sealed trait ZoomEvent {
 object ZoomEvent {
   def cleanIdPack(idPack: String): String = idPack.replace("Some(", "").replace(")", "")
 
-  /*def fromJson(str: String): Try[Event] = {
-    def shouldCleanIdPack(evt: HasIdPack): Boolean = evt.idPack.contains("Some")
-
-    EventSerde.fromJson[Event](str).map({
-      case a: AccessChangedEvent if shouldCleanIdPack(a) ⇒ a.copy(idPack = cleanIdPack(a.idPack))
-      case a: PackPerfPlanEvent if shouldCleanIdPack(a)  ⇒ a.copy(idPack = cleanIdPack(a.idPack))
-      case a: PackMcCreated if shouldCleanIdPack(a)      ⇒ a.copy(idPack = cleanIdPack(a.idPack))
-      case a: CvivCreatedEvent if shouldCleanIdPack(a)   ⇒ a.copy(idPack = cleanIdPack(a.idPack))
-      case e: HasIdPack if shouldCleanIdPack(e) ⇒
-        throw new Exception("contains Some for idPack " + e)
-      case e ⇒ e
-    })
-  }*/
-
-  def toJson(e: ZoomEvent): ToJson = EventSerde.toJson(e)
+  def toJson(e: ZoomEvent): ToJson = ZoomEventSerde.toJson(e)
 }
 
 case class StartedNewNode(

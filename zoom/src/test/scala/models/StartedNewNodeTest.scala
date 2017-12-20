@@ -48,13 +48,13 @@ class StartedNewNodeTest extends FunSuite with EmbdedKafkaCustom with EmbeddedKa
 
     import BuildInfoTest._
 
-    val inJson = EventSerde.toJson(startedNewNode)
+    val inJson = ZoomEventSerde.toJson(startedNewNode)
 
     assert(inJson.event_type == "models.StartedNewNode")
 
     assert(inJson.payload.contains("StartedNewNode"))
 
-    assert(EventSerde.fromJson[StartedNewNode](inJson.payload).get == startedNewNode)
+    assert(ZoomEventSerde.fromJson[StartedNewNode](inJson.payload).get == startedNewNode)
 
   }
 

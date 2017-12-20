@@ -41,7 +41,7 @@ trait ProjectEncoderDecoder {
   //implicit val decodeToggleAction: Decoder[ToggleAction] = Decoder.decodeString.map[ToggleAction](ToggleAction.fromString)
 }
 
-object EventSerde extends ProjectEncoderDecoder {
+object ZoomEventSerde extends ProjectEncoderDecoder {
 
   /*
   //in case of import optimization

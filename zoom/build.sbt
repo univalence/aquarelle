@@ -44,6 +44,9 @@ libraryDependencies ++= Seq(
   "org.scala-lang" % "scala-reflect" % scalaVersion.value
 )
 
+
+parallelExecution := false
+
 packAutoSettings
 
 scalariformPreferences := scalariformPreferences.value

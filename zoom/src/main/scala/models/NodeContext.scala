@@ -90,7 +90,7 @@ class NodeContext(
     event_id: UUID = UUID.randomUUID()
   )(implicit tracingContext: Tracing, callsite: Callsite): Future[Unit] = {
 
-    val json = EventSerde.toJson(event)
+    val json = ZoomEventSerde.toJson(event)
     publishRaw(json.payload.getBytes, "data.event." + environment.shortname, EventFormat.CCJson, event_type = json.event_type, event_id)
   }
 

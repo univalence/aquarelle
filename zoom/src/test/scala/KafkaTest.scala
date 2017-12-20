@@ -55,7 +55,7 @@ class KafkaTest extends FunSuite with EmbdedKafkaCustom with EmbeddedKafka with 
 
   test("kafkaWithHeaders") {
 
-    val json: EventSerde.ToJson = EventSerde.toJson(BuildInfoTest.startedNewNode)
+    val json: ZoomEventSerde.ToJson = ZoomEventSerde.toJson(BuildInfoTest.startedNewNode)
 
     val callsite: Callsite = implicitly[Callsite]
 

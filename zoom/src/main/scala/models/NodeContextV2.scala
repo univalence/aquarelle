@@ -3,8 +3,11 @@ package models
 import java.nio.charset.Charset
 import java.util.UUID
 
+import models.OutTopics.GroupEnv
 import models.macros.Callsite
-import org.apache.kafka.clients.producer.{ KafkaProducer, ProducerConfig }
+import org.apache.kafka.clients.producer.{ KafkaProducer, ProducerConfig, ProducerRecord }
+import org.apache.kafka.common.header.Header
+import org.apache.kafka.common.header.internals.RecordHeader
 import org.apache.kafka.common.serialization.{ ByteArraySerializer, StringSerializer }
 
 import scala.concurrent.Future
@@ -51,7 +54,7 @@ object NCSer {
   @deprecated(message = "to move in trafic garanti")
   val tgEventSerde: NCSer[ZoomEvent] = new NCSer[ZoomEvent] {
     override def serialize(event: ZoomEvent): Array[Byte] =
-      EventSerde.toJson(event).
+      ZoomEventSerde.toJson(event).
         payload.
         getBytes(Charset.forName("UTF_8"))
 
@@ -62,7 +65,7 @@ object NCSer {
 
 }
 
-object NoteContext {
+object NoteContextV2 {
 
   //TODO : Use a smart constructor to make sure that cannot be get an instance without a valid connexion to Kafka
 
@@ -77,6 +80,44 @@ class NodeContextV2[Event] private (
   val topicStrategy:      OutTopics.Strategy = OutTopics.defaultStrategy,
   val zoomGroupName:      String             = "zoom"
 ) extends Serializable {
+
+  private object nodeElement {
+    val nodeId: UUID = UUID.randomUUID()
+    private val nodeTracingContext: Tracing = Tracing()
+    private val nodeOutTopics: OutTopics = topicStrategy(GroupEnv("zoom", environment))
+
+    def start(): Unit = {
+      val json = ZoomEventSerde.toJson(StartedNewNode.fromBuild(buildInfo, environment, nodeId))
+
+      publishLow(
+        topic = nodeOutTopics.event,
+        content = json.payload.getBytes(UTF8_CHARSET),
+        format = EventFormat.CCJson,
+        eventType = json.event_type,
+        tracing = nodeTracingContext,
+        callsite = implicitly[Callsite]
+      )
+      //publishStartedNode into zoom.event.event ?
+      //saveEvent(StartedNewNode.fromBuild(buildInfo, environment, nodeId))(nodeTracingContext, Callsite.callSite)
+    }
+
+    val logger = new NodeLogger with LoggerImplWithCtx[Callsite] {
+      override def log(message: ⇒ String, level: String)(implicit context: Callsite): Unit = {
+        implicit val t = nodeTracingContext
+        /*publishRaw(
+          content = message.getBytes,
+          topic = "logs." + environment.shortname,
+          event_format = EventFormat.Raw,
+          event_type = s"logs/$level/" + this.getClass.getName,
+          key = Some(nodeId.toString)
+        )*/
+      }
+    }
+  }
+
+  private val groupOutTopics: OutTopics = topicStrategy(GroupEnv(group, environment))
+
+  private val UTF8_CHARSET: Charset = java.nio.charset.Charset.forName("UTF-8")
 
   ??? // do not use yet
   //TODO : Find how other let user use their event definition
@@ -101,17 +142,9 @@ class NodeContextV2[Event] private (
     ProducerConfig.RETRY_BACKOFF_MS_CONFIG -> 1000.toString
   ) ++ kafkaConfiguration.customProducerProperties
 
-  val nodeId: UUID = UUID.randomUUID()
-  val nodeTracingContext: Tracing = Tracing()
-
   lazy val producer: KafkaProducer[String, Array[Byte]] = {
     import scala.collection.JavaConverters._
     new KafkaProducer(baseProducerConfig.asJava, new StringSerializer(), new ByteArraySerializer())
-  }
-
-  private def start(): Unit = {
-    //publishStartedNode into zoom.event.event ?
-    //saveEvent(StartedNewNode.fromBuild(buildInfo, environment, nodeId))(nodeTracingContext, Callsite.callSite)
   }
 
   def heartbeat(): Unit = {
@@ -126,15 +159,46 @@ class NodeContextV2[Event] private (
     //
   }
 
-  start()
+  nodeElement.start()
 
-  def saveEvent(event: Event)(implicit tracingContext: Tracing, callsite: Callsite): Future[Unit] = {
+  def publishEvent(event: Event)(implicit tracingContext: Tracing, callsite: Callsite): Future[Unit] = {
     val event_id: UUID = UUID.randomUUID()
 
+    val content = eventSer.serialize(event)
     /*val json = EventSerde.toJson(event)
     publishRaw(json.payload.getBytes, "data.event." + environment.shortname, EventFormat.CCJson,
       event_type = json.event_type, event_id)*/
+
+    //  publishLow()
     ???
+  }
+
+  private def publishLow(topic: String, content: Array[Byte], format: EventFormat, eventType: String, tracing: Tracing, callsite: Callsite): Future[Unit] = {
+
+    val meta = EventMetadata(
+      event_id = UUID.randomUUID(),
+      event_type = eventType,
+      event_format = format,
+      trace_id = tracing.getTraceId,
+      parent_span_id = tracing.getParentSpanId,
+      previous_span_id = tracing.getPreviousSpanId,
+      span_id = tracing.getSpanId,
+      node_id = nodeElement.nodeId,
+      env = environment, callsite = Some(callsite),
+      on_behalf_of = tracing.getOnBehalfOf
+    )
+
+    // headers: Seq[(String, Array[Byte])]
+
+    import scala.collection.JavaConverters._
+    import scala.concurrent.ExecutionContext.Implicits.global
+    val headers = meta.toStringMap.mapValues(_.getBytes).toSeq
+
+    val hdrs = headers.map(t ⇒ new RecordHeader(t._1, t._2).asInstanceOf[Header])
+    val record: ProducerRecord[String, Array[Byte]] = new ProducerRecord[String, Array[Byte]](topic, null, new java.util.Date().getTime, null, content, hdrs.asJava)
+    Future {
+      producer.send(record).get
+    }
   }
 
   def publishRaw(content: Array[Byte], format: EventFormat)(implicit
@@ -199,17 +263,6 @@ class NodeContextV2[Event] private (
     }
   }
 
-  lazy val rootLog: NodeLogger = new NodeLogger with LoggerImplWithCtx[Callsite] {
-    override def log(message: ⇒ String, level: String)(implicit context: Callsite): Unit = {
-      implicit val t = nodeTracingContext
-      /*publishRaw(
-        content = message.getBytes,
-        topic = "logs." + environment.shortname,
-        event_format = EventFormat.Raw,
-        event_type = s"logs/$level/" + this.getClass.getName,
-        key = Some(nodeId.toString)
-      )*/
-    }
-  }
+  def rootLog: NodeLogger = nodeElement.logger
 }
 
