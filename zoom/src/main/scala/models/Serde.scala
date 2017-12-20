@@ -63,13 +63,13 @@ object EventSerde extends ProjectEncoderDecoder {
 
   implicit val customConfig: Configuration = Configuration.default.withDefaults.withDiscriminator("_typehint")
 
-  lazy val decoder: ConfiguredDecoder[Event] = the[ConfiguredDecoder[Event]]
+  lazy val decoder: ConfiguredDecoder[ZoomEvent] = the[ConfiguredDecoder[ZoomEvent]]
 
-  def toJson(obj: Event): ToJson = {
-    ToJson(obj.getClass.getName, obj.asJson(the[ConfiguredObjectEncoder[Event]]).noSpaces)
+  def toJson(obj: ZoomEvent): ToJson = {
+    ToJson(obj.getClass.getName, obj.asJson(the[ConfiguredObjectEncoder[ZoomEvent]]).noSpaces)
   }
-  def fromJson[T <: Event](s: String): Try[T] = {
-    val error1OrEvent: Either[Error, Event] = decode[Event](s)(decoder)
+  def fromJson[T <: ZoomEvent](s: String): Try[T] = {
+    val error1OrEvent: Either[Error, ZoomEvent] = decode[ZoomEvent](s)(decoder)
     Try {
       error1OrEvent.fold[Try[T]](e ⇒ Failure(e), x ⇒ Try(x.asInstanceOf[T]))
     }.flatten

@@ -85,7 +85,7 @@ class NodeContext(
 
   start()
 
-  def saveEvent[E <: Event](
+  def saveEvent[E <: ZoomEvent](
     event:    E,
     event_id: UUID = UUID.randomUUID()
   )(implicit tracingContext: Tracing, callsite: Callsite): Future[Unit] = {

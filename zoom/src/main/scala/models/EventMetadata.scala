@@ -240,11 +240,11 @@ object EventMetadata {
   }
 }
 
-sealed trait Event {
-  def toJson: ToJson = Event.toJson(this)
+sealed trait ZoomEvent {
+  def toJson: ToJson = ZoomEvent.toJson(this)
 }
 
-object Event {
+object ZoomEvent {
   def cleanIdPack(idPack: String): String = idPack.replace("Some(", "").replace(")", "")
 
   /*def fromJson(str: String): Try[Event] = {
@@ -261,7 +261,7 @@ object Event {
     })
   }*/
 
-  def toJson(e: Event): ToJson = EventSerde.toJson(e)
+  def toJson(e: ZoomEvent): ToJson = EventSerde.toJson(e)
 }
 
 case class StartedNewNode(
@@ -275,7 +275,7 @@ case class StartedNewNode(
   prg_buildAt:      Instant,
   node_hostname:    String,
   more:             Map[String, String]
-) extends Event
+) extends ZoomEvent
 
 case class BuildInfo(name: String, organization: String, version: String, commit: String, buildAt: Instant)
 
@@ -312,4 +312,4 @@ case class StoppedNode(
   stop_inst: Instant,
   cause:     String,
   more:      Map[String, String]
-) extends Event
+) extends ZoomEvent
