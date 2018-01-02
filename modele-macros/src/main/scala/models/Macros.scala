@@ -16,7 +16,7 @@ object Callsite {
 
   implicit def callSite: Callsite = macro CallSiteMacro.callSiteImpl
 
-  //def callSite:Callsite = Callsite("TestCallSite",None,"filename.scala",11) 
+  //def callSite:Callsite = Callsite("TestCallSite",None,"filename.scala",11)
 }
 
 object CallSiteMacro {
