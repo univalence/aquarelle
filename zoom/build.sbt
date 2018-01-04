@@ -22,6 +22,7 @@ libraryDependencies ++= Seq(
   "circe-optics"
 ).map(x => "io.circe" %% x % circeVersion)
 
+
 libraryDependencies ++= Seq(
   //Kafka
   "org.apache.kafka" % "kafka-clients" % "0.11.0.0",

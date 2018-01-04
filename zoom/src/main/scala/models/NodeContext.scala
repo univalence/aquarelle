@@ -15,7 +15,7 @@ import scala.concurrent.Future
 
 case class KafkaConfiguration(
   kafkaPort:                Int,
-  kafkaHost:                String              = "trafgar01t.bbo1t.local",
+  kafkaHost:                String,
   customBrokerProperties:   Map[String, String] = Map.empty,
   customProducerProperties: Map[String, String] = Map.empty
 ) {
@@ -24,7 +24,7 @@ case class KafkaConfiguration(
 }
 
 object KafkaConfiguration {
-  def defaultKafkaConfiguration: KafkaConfiguration = new KafkaConfiguration(9092)
+  def localKafkaConfiguration: KafkaConfiguration = new KafkaConfiguration(9092, "localhost")
 }
 
 trait LoggerWithCtx[Context] {
@@ -60,7 +60,7 @@ case class NodeInfo(node_id: UUID)
 class NodeContext(
   val environment:    Environment,
   private val nodeId: UUID               = UUID.randomUUID(),
-  kafkaConfiguration: KafkaConfiguration = KafkaConfiguration.defaultKafkaConfiguration,
+  kafkaConfiguration: KafkaConfiguration = KafkaConfiguration.localKafkaConfiguration,
   nodeTracingContext: Tracing            = Tracing()
 )(implicit buildInfo: BuildInfo) extends Serializable {
 

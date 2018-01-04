@@ -37,7 +37,7 @@ object EventFormat {
 }
 
 sealed trait Environment {
-  def shortname = this match {
+  def shortname: String = this match {
     case Production        ⇒ "prod"
     case Integration       ⇒ "int"
     case RecetteTransverse ⇒ "rect"

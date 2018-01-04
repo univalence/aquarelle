@@ -3,15 +3,17 @@ package models
 import java.nio.charset.Charset
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 
 import models.OutTopics.GroupEnv
 import models.macros.Callsite
-import org.apache.kafka.clients.producer.{ KafkaProducer, ProducerConfig, ProducerRecord }
+import org.apache.kafka.clients.producer._
 import org.apache.kafka.common.header.Header
 import org.apache.kafka.common.header.internals.RecordHeader
 import org.apache.kafka.common.serialization.{ ByteArraySerializer, StringSerializer }
 
-import scala.concurrent.Future
+import scala.concurrent.{ Await, Future, Promise }
+import scala.util.Try
 
 case class OutTopics(log: String, event: String, raw: String)
 
@@ -66,38 +68,63 @@ object NCSer {
 
 }
 
-object NoteContextV2 {
+object NodeContextV2 {
 
-  //TODO : Use a smart constructor to make sure that cannot be get an instance without a valid connexion to Kafka
+  def createAndStart[Event](
+    group:              String,
+    environment:        Environment,
+    kafkaConfiguration: KafkaConfiguration,
+    buildInfo:          BuildInfo,
+    eventSer:           NCSer[Event],
+    topicStrategy:      OutTopics.Strategy = OutTopics.defaultStrategy,
+    zoomGroupName:      String             = "zoom"
+  ): Try[NodeContextV2[Event]] = {
 
-  //??? // do not use yet
-  //TODO : Find how other let user use their event definition
-  //Take a look at akka persistence or eventuate or Lagom
-  //add a type T for event ? NodeContext[T]
-  /*
-    @deprecated(message = "pass buildinfo directly or use macwire")
-    @deprecated(message = "should specify group")
-    @deprecated(message = "use the smart factory")
-    def this(environment: Environment)(implicit buildInfo: BuildInfo) = {
-      this(group = "data",
-        environment = environment,
-        buildInfo = buildInfo,
-        topicStrategy = OutTopics.oldStrategy,
-        eventSer = NCSer.tgEventSerde)
-    }
-    */
+    new NodeContextV2[Event](group, environment, kafkaConfiguration, buildInfo, eventSer, topicStrategy, zoomGroupName).init
+  }
 
 }
 
 class NodeContextV2[Event] protected (
   val group:              String,
   val environment:        Environment,
-  val kafkaConfiguration: KafkaConfiguration = KafkaConfiguration.defaultKafkaConfiguration,
+  val kafkaConfiguration: KafkaConfiguration,
   val buildInfo:          BuildInfo,
   val eventSer:           NCSer[Event],
   val topicStrategy:      OutTopics.Strategy = OutTopics.defaultStrategy,
   val zoomGroupName:      String             = "zoom"
 ) extends Serializable {
+
+  private var isRunning: Boolean = false
+
+  private val groupOutTopics: OutTopics = topicStrategy(GroupEnv(group, environment))
+
+  private val UTF8_CHARSET: Charset = java.nio.charset.Charset.forName("UTF-8")
+
+  private def baseProducerConfig: Map[String, Object] = Map[String, Object](
+    ProducerConfig.BOOTSTRAP_SERVERS_CONFIG -> kafkaConfiguration.kafkaBrokers,
+    ProducerConfig.MAX_BLOCK_MS_CONFIG -> 10000.toString,
+    ProducerConfig.RETRY_BACKOFF_MS_CONFIG -> 10000.toString
+  ) ++ kafkaConfiguration.customProducerProperties
+
+  private val producer: KafkaProducer[String, Array[Byte]] = {
+    import scala.collection.JavaConverters._
+    val config = baseProducerConfig
+    new KafkaProducer(config.asJava, new StringSerializer(), new ByteArraySerializer())
+  }
+
+  def init: Try[NodeContextV2[Event]] = {
+
+    Try {
+
+      nodeElement.start()
+
+      isRunning = true
+      this
+    }
+  }
+
+  def nodeId: UUID = nodeElement.nodeId
 
   private object nodeElement {
     val nodeId: UUID = UUID.randomUUID()
@@ -111,7 +138,7 @@ class NodeContextV2[Event] protected (
         node_id = nodeId
       ))
 
-      publishLow(
+      val future = publishLow(
         topic = nodeOutTopics.event,
         content = json.payload.getBytes(UTF8_CHARSET),
         format = EventFormat.CCJson,
@@ -119,24 +146,41 @@ class NodeContextV2[Event] protected (
         tracing = nodeTracingContext,
         callsite = implicitly[Callsite]
       )
+
+      import scala.concurrent._
+      import scala.concurrent.duration._
+      //Await.result(future,20 seconds)
+
+      {
+        Runtime.getRuntime.addShutdownHook(new Thread() {
+          override def run(): Unit = {
+            nodeElement.stop()
+          }
+        })
+      }
+
     }
 
     def stop(): Unit = {
-      val json = ZoomEventSerde.toJson(StoppedNode(
-        node_id = nodeId,
-        stop_inst = Instant.now,
-        cause = "shutdown hook",
-        more = Map.empty
-      ))
 
-      publishLow(
-        topic = nodeOutTopics.event,
-        content = json.payload.getBytes(UTF8_CHARSET),
-        format = EventFormat.CCJson,
-        eventType = json.event_type,
-        tracing = nodeTracingContext,
-        callsite = implicitly[Callsite]
-      )
+      if (isRunning) {
+        val json = ZoomEventSerde.toJson(StoppedNode(
+          node_id = nodeId,
+          stop_inst = Instant.now,
+          cause = "shutdown hook",
+          more = Map.empty
+        ))
+
+        publishLow(
+          topic = nodeOutTopics.event,
+          content = json.payload.getBytes(UTF8_CHARSET),
+          format = EventFormat.CCJson,
+          eventType = json.event_type,
+          tracing = nodeTracingContext,
+          callsite = implicitly[Callsite]
+        )
+        isRunning = false
+      }
 
     }
 
@@ -156,29 +200,9 @@ class NodeContextV2[Event] protected (
     }
   }
 
-  private val groupOutTopics: OutTopics = topicStrategy(GroupEnv(group, environment))
+  def stop(): Unit = {
 
-  private val UTF8_CHARSET: Charset = java.nio.charset.Charset.forName("UTF-8")
-
-  private def baseProducerConfig: Map[String, Object] = Map[String, Object](
-    ProducerConfig.BOOTSTRAP_SERVERS_CONFIG -> kafkaConfiguration.kafkaBrokers,
-    ProducerConfig.MAX_BLOCK_MS_CONFIG -> 10000.toString,
-    ProducerConfig.RETRY_BACKOFF_MS_CONFIG -> 1000.toString
-  ) ++ kafkaConfiguration.customProducerProperties
-
-  private val producer: KafkaProducer[String, Array[Byte]] = {
-    import scala.collection.JavaConverters._
-    new KafkaProducer(baseProducerConfig.asJava, new StringSerializer(), new ByteArraySerializer())
-  }
-
-  nodeElement.start()
-
-  {
-    Runtime.getRuntime.addShutdownHook(new Thread() {
-      override def run(): Unit = {
-        nodeElement.stop()
-      }
-    })
+    nodeElement.stop()
   }
 
   def publishEvent(event: Event)(implicit tracing: Tracing, callsite: Callsite): Future[Unit] = {
@@ -187,9 +211,13 @@ class NodeContextV2[Event] protected (
     val eventType = eventSer.eventType(event)
 
     publishLow(groupOutTopics.event, content, EventFormat.CCJson, eventType, tracing, callsite)
+
+    import scala.concurrent.ExecutionContext.Implicits.global
+
+    Future[Unit]()
   }
 
-  private def publishLow(topic: String, content: Array[Byte], format: EventFormat, eventType: String, tracing: Tracing, callsite: Callsite): Future[Unit] = {
+  private def publishLow(topic: String, content: Array[Byte], format: EventFormat, eventType: String, tracing: Tracing, callsite: Callsite): Unit = {
 
     val meta = EventMetadata(
       event_id = UUID.randomUUID(),
@@ -209,6 +237,7 @@ class NodeContextV2[Event] protected (
     val headers = meta.toStringMap.mapValues(_.getBytes).toSeq
 
     val hdrs = headers.map(t ⇒ new RecordHeader(t._1, t._2).asInstanceOf[Header])
+
     val record: ProducerRecord[String, Array[Byte]] = new ProducerRecord[String, Array[Byte]](
       topic,
       null,
@@ -218,9 +247,8 @@ class NodeContextV2[Event] protected (
       hdrs.asJava
     )
 
-    Future {
-      producer.send(record).get
-    }
+    producer.send(record).get
+
   }
 
   def publishRaw(
@@ -233,6 +261,9 @@ class NodeContextV2[Event] protected (
     callsite: Callsite
   ): Future[Unit] = {
     publishLow(groupOutTopics.raw, content, EventFormat.Raw, eventType, tracing, callsite)
+    import scala.concurrent.ExecutionContext.Implicits.global
+    Future[Unit]()
+
   }
 
   def getLogger(logClass: Class[_]): Logger = new LoggerImplWithCtx[TracingAndCallSite] with Logger {
