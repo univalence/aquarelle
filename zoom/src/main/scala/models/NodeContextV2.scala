@@ -81,11 +81,25 @@ object NodeContextV2 {
   ): Try[NodeContextV2[Event]] = {
 
     new NodeContextV2[Event](group, environment, kafkaConfiguration, buildInfo, eventSer, topicStrategy, zoomGroupName).init
+
   }
 
 }
 
-class NodeContextV2[Event] protected (
+object CheckKafkaProducerConfiguration {
+
+  case class ConfigurationIssue(msg: String, description: String, isError: Boolean)
+  def checkConfiguration(kafkaConfig: Map[String, Object]): Seq[ConfigurationIssue] = {
+
+    if (kafkaConfig(ProducerConfig.MAX_BLOCK_MS_CONFIG).toString.toLong < kafkaConfig(ProducerConfig.RETRY_BACKOFF_MS_CONFIG).toString.toLong)
+      Seq(ConfigurationIssue("MAX_BLOCK < RETRY_BACKOFF", "MAX BLOCK should be greater than RETRY BACKOFF, else NodeContextV2 doesn't work on new topics",
+        isError = true))
+    else Seq.empty
+  }
+
+}
+
+final class NodeContextV2[Event] protected (
   val group:              String,
   val environment:        Environment,
   val kafkaConfiguration: KafkaConfiguration,
@@ -101,10 +115,10 @@ class NodeContextV2[Event] protected (
 
   private val UTF8_CHARSET: Charset = java.nio.charset.Charset.forName("UTF-8")
 
-  private def baseProducerConfig: Map[String, Object] = Map[String, Object](
+  private val baseProducerConfig: Map[String, Object] = Map[String, Object](
     ProducerConfig.BOOTSTRAP_SERVERS_CONFIG -> kafkaConfiguration.kafkaBrokers,
     ProducerConfig.MAX_BLOCK_MS_CONFIG -> 10000.toString,
-    ProducerConfig.RETRY_BACKOFF_MS_CONFIG -> 10000.toString
+    ProducerConfig.RETRY_BACKOFF_MS_CONFIG -> 1000.toString
   ) ++ kafkaConfiguration.customProducerProperties
 
   private val producer: KafkaProducer[String, Array[Byte]] = {
@@ -117,8 +131,9 @@ class NodeContextV2[Event] protected (
 
     Try {
 
-      nodeElement.start()
+      assert(!CheckKafkaProducerConfiguration.checkConfiguration(baseProducerConfig).exists(_.isError))
 
+      nodeElement.start()
       isRunning = true
       this
     }
