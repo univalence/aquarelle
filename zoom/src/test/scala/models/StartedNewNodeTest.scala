@@ -34,9 +34,10 @@ object BuildInfoTest {
 
 class StartedNewNodeTest extends FunSuite with EmbdedKafkaCustom with EmbeddedKafka with BeforeAndAfterAll {
 
-  import EmbeddedKafkaConfig._
+  implicit val embdedKafkaConfig: EmbeddedKafkaConfig =
+    RandomizePostKafka.changePortKafkaConfiguration_!(EmbeddedKafkaConfig.defaultConfig)
 
-  val testKafkaConfiguration = KafkaConfiguration(defaultConfig.kafkaPort, "localhost")
+  val testKafkaConfiguration = KafkaConfiguration(embdedKafkaConfig.kafkaPort, "localhost")
 
   implicit val keySerializer = new StringSerializer
   implicit val stringDe = new StringDeserializer

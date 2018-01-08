@@ -7,10 +7,11 @@ import java.util.concurrent.TimeUnit
 
 import models.OutTopics.GroupEnv
 import models.macros.Callsite
+import org.apache.kafka.clients.consumer.{ ConsumerConfig, KafkaConsumer }
 import org.apache.kafka.clients.producer._
 import org.apache.kafka.common.header.Header
 import org.apache.kafka.common.header.internals.RecordHeader
-import org.apache.kafka.common.serialization.{ ByteArraySerializer, StringSerializer }
+import org.apache.kafka.common.serialization.{ ByteArrayDeserializer, ByteArraySerializer, StringDeserializer, StringSerializer }
 
 import scala.concurrent.{ Await, Future, Promise }
 import scala.util.Try
@@ -121,30 +122,66 @@ final class NodeContextV2[Event] protected (
     ProducerConfig.RETRY_BACKOFF_MS_CONFIG -> 1000.toString
   ) ++ kafkaConfiguration.customProducerProperties
 
+  private val baseConsumerConfig: Map[String, Object] = Map[String, Object](
+    ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG -> kafkaConfiguration.kafkaBrokers
+  )
+
   private val producer: KafkaProducer[String, Array[Byte]] = {
     import scala.collection.JavaConverters._
-    val config = baseProducerConfig
-    new KafkaProducer(config.asJava, new StringSerializer(), new ByteArraySerializer())
+    new KafkaProducer(baseProducerConfig.asJava, new StringSerializer(), new ByteArraySerializer())
+  }
+
+  private val consumer: KafkaConsumer[String, Array[Byte]] = {
+    import scala.collection.JavaConverters._
+
+    new KafkaConsumer[String, Array[Byte]](baseConsumerConfig.asJava, new StringDeserializer(), new ByteArrayDeserializer())
+
   }
 
   def init: Try[NodeContextV2[Event]] = {
 
     Try {
-
-      assert(!CheckKafkaProducerConfiguration.checkConfiguration(baseProducerConfig).exists(_.isError))
-
+      assert(!CheckKafkaProducerConfiguration.
+        checkConfiguration(baseProducerConfig).
+        exists(_.isError))
+      nodeElement.checkTopicExistanceAndLog()
+      checkTopicExistanceAndLog
       nodeElement.start()
       isRunning = true
       this
     }
   }
 
+  private def isTopicCreated(topic: String): Boolean = {
+    consumer.listTopics().containsKey(topic)
+  }
+
   def nodeId: UUID = nodeElement.nodeId
+
+  private def checkTopicExistanceAndLog(): Unit = {
+    if (!isTopicCreated(groupOutTopics.log)) {
+      rootLog.warn(s"$group log topic does not exist")
+    }
+
+    if (!isTopicCreated(groupOutTopics.event)) {
+      rootLog.warn(s"$group event topic does not exist")
+    }
+  }
 
   private object nodeElement {
     val nodeId: UUID = UUID.randomUUID()
     private val nodeTracingContext: Tracing = Tracing()
-    private val nodeOutTopics: OutTopics = topicStrategy(GroupEnv("zoom", environment))
+    protected val nodeOutTopics: OutTopics = topicStrategy(GroupEnv("zoom", environment))
+
+    def checkTopicExistanceAndLog(): Unit = {
+      if (!isTopicCreated(nodeElement.nodeOutTopics.log)) {
+        rootLog.warn("zoom log topic does not exist (and we are trying to log in it, why not)")
+      }
+
+      if (!isTopicCreated(nodeElement.nodeOutTopics.event)) {
+        rootLog.warn("zoom event topic does not exist (and we will use it in a couple of ms)")
+      }
+    }
 
     def start(): Unit = {
       val json = ZoomEventSerde.toJson(StartedNewNode.fromBuild(
@@ -203,6 +240,7 @@ final class NodeContextV2[Event] protected (
       override def log(message: ⇒ String, level: String)(implicit context: Callsite): Unit = {
         implicit val t = nodeTracingContext
 
+        println(level + ":" + message)
         publishLow(
           topic = nodeOutTopics.log,
           content = message.getBytes(UTF8_CHARSET),

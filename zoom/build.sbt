@@ -46,7 +46,7 @@ libraryDependencies ++= Seq(
 )
 
 
-parallelExecution := false
+parallelExecution := true
 
 packAutoSettings
 
