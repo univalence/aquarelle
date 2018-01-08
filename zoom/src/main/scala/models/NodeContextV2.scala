@@ -110,6 +110,8 @@ final class NodeContextV2[Event] protected (
   val zoomGroupName:      String             = "zoom"
 ) extends Serializable {
 
+  import scala.concurrent.ExecutionContext.Implicits.global
+
   private var isRunning: Boolean = false
 
   private val groupOutTopics: OutTopics = topicStrategy(GroupEnv(group, environment))
@@ -123,6 +125,9 @@ final class NodeContextV2[Event] protected (
   ) ++ kafkaConfiguration.customProducerProperties
 
   private val baseConsumerConfig: Map[String, Object] = Map[String, Object](
+    //ConsumerConfig.CONNECTIONS_MAX_IDLE_MS_CONFIG -> 100000.toString,
+    ConsumerConfig.FETCH_MAX_WAIT_MS_CONFIG -> 10000.toString,
+    ConsumerConfig.RECONNECT_BACKOFF_MAX_MS_CONFIG -> 10000.toString,
     ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG -> kafkaConfiguration.kafkaBrokers
   )
 
@@ -145,7 +150,7 @@ final class NodeContextV2[Event] protected (
         checkConfiguration(baseProducerConfig).
         exists(_.isError))
       nodeElement.checkTopicExistanceAndLog()
-      checkTopicExistanceAndLog
+      checkTopicExistanceAndLog_!
       nodeElement.start()
       isRunning = true
       this
@@ -153,12 +158,13 @@ final class NodeContextV2[Event] protected (
   }
 
   private def isTopicCreated(topic: String): Boolean = {
-    consumer.listTopics().containsKey(topic)
+    import scala.concurrent.duration._
+    Await.result(Future(consumer.listTopics().containsKey(topic)), 15 seconds)
   }
 
   def nodeId: UUID = nodeElement.nodeId
 
-  private def checkTopicExistanceAndLog(): Unit = {
+  private def checkTopicExistanceAndLog_!(): Unit = {
     if (!isTopicCreated(groupOutTopics.log)) {
       rootLog.warn(s"$group log topic does not exist")
     }

@@ -24,6 +24,7 @@ object RandomizePostKafka {
     givenPort.synchronized({
       val newPort = (from to 65535).view.filterNot(givenPort).filter(isLocalPortFree_!).head
       givenPort.add(newPort)
+      println(s"on port : $newPort")
       newPort
     })
   }
@@ -41,6 +42,8 @@ object RandomizePostKafka {
       kafkaPort = newFreePort_!(kafkaConfiguration.kafkaPort),
       zooKeeperPort = newFreePort_!(kafkaConfiguration.zooKeeperPort)
     )
+
+    kafkaConfiguration
   }
 
 }
@@ -115,7 +118,7 @@ class StartedNewNodeTestV2 extends FunSuite with EmbdedKafkaCustom with Embedded
     Try {
       //producer.partitionsFor("local.zoom.event")
     }
-    val metadata = producer.send(record).get(20, TimeUnit.SECONDS)
+    val metadata = producer.send(record).get(5, TimeUnit.SECONDS)
     println(metadata)
 
   }

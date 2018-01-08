@@ -27,7 +27,7 @@ class KafkaTest extends FunSuite with EmbdedKafkaCustom with EmbeddedKafka with 
 
   val customConsumerConfig = Map("max.partition.fetch.bytes" -> "2000000")
 
-  implicit val customKafkaConfig = RandomizePostKafka.changePortKafkaConfiguration_!(
+  implicit val customKafkaConfig: EmbeddedKafkaConfig = RandomizePostKafka.changePortKafkaConfiguration_!(
     EmbeddedKafkaConfig(
       customBrokerProperties = customBrokerConfig,
       customProducerProperties = customProducerConfig,
