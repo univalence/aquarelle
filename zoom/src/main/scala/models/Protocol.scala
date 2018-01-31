@@ -1,11 +1,10 @@
-package modelstagless
+package zoom
 
-import models.macros.Callsite
-import modelstagless.TestModel.Logger.Level
 import shapeless.Id
 
 import scala.language.higherKinds
 
+/*
 object TestModel {
 
   trait Logger[F[_]] {
@@ -23,16 +22,6 @@ object TestModel {
   }
 
   object Logger {
-
-    sealed trait Level
-
-    case object Debug extends Level
-
-    case object Info extends Level
-
-    case object Warn extends Level
-
-    case object Error extends Level
 
     object ops {
       implicit def toDslLogger[F[_]](o: Logger.type)(implicit m: Logger[F]): Logger[F] = m
@@ -94,3 +83,4 @@ object TestModel {
   }
 
 }
+*/ 

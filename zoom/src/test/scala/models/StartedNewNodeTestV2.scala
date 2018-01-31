@@ -4,16 +4,18 @@ import java.util.concurrent.TimeUnit
 
 import kafka.admin.AdminUtils
 import kafka.utils.ZkUtils
-import models.OutTopics.GroupEnv
 import net.manub.embeddedkafka.{ EmbeddedKafka, EmbeddedKafkaConfig }
 import org.apache.kafka.clients.producer.{ KafkaProducer, ProducerConfig, ProducerRecord }
 import org.apache.kafka.common.serialization.{ ByteArrayDeserializer, ByteArraySerializer, StringDeserializer, StringSerializer }
 import org.scalatest.{ BeforeAndAfterAll, FunSuite }
+import zoom.OutTopics.GroupEnv
+import zoom._
 
 import scala.collection.mutable
 import scala.util.Try
+import utils.RandomizePostKafka
 
-object RandomizePostKafka {
+/*object RandomizePostKafka {
 
   import java.io.IOException
   import java.net.ServerSocket
@@ -46,7 +48,7 @@ object RandomizePostKafka {
     kafkaConfiguration
   }
 
-}
+}*/
 
 class StartedNewNodeTestV2 extends FunSuite with EmbdedKafkaCustom with EmbeddedKafka with BeforeAndAfterAll {
 
@@ -77,7 +79,7 @@ class StartedNewNodeTestV2 extends FunSuite with EmbdedKafkaCustom with Embedded
 
     val inJson = ZoomEventSerde.toJson(startedNewNode)
 
-    assert(inJson.event_type == "models.StartedNewNode")
+    assert(inJson.event_type == "zoom.StartedNewNode")
 
     assert(inJson.payload.contains("StartedNewNode"))
 
@@ -141,6 +143,13 @@ class StartedNewNodeTestV2 extends FunSuite with EmbdedKafkaCustom with Embedded
     assert(t.isFailure)
   }
 
+  test("decode startedEvent") {
+    val event = "{\"node_id\":\"959d85cc-2137-4fb5-bad8-c8066a584c28\",\"startup_inst\":\"2018-01-22T22:45:06.614Z\",\"environment\":\"Local\",\"prg_name\":\"zm\",\"prg_organization\":\"zm\",\"prg_version\":\"fd6f56c3d115bf3bd3e7a041410cb9f3828b5ec4-SNAPSHOT\",\"prg_commit\":\"fd6f56c3d115bf3bd3e7a041410cb9f3828b5ec4\",\"prg_buildAt\":\"2018-01-22T22:19:17.249Z\",\"node_hostname\":\"Blaze-2.local\",\"more\":{},\"_typehint\":\"StartedNewNode\"}"
+
+    assert(ZoomEvent.fromJson(event).get.isInstanceOf[StartedNewNode])
+
+  }
+
   test("Publish To Node") {
     val buildInfo = BuildInfoTest.buildInfo
 
@@ -153,30 +162,42 @@ class StartedNewNodeTestV2 extends FunSuite with EmbdedKafkaCustom with Embedded
         override def format: EventFormat = EventFormat.Raw
         override def eventType(event: Unit): String = "unit"
         override def serialize(event: Unit): Array[Byte] = Array()
-      }
+      },
+      topicStrategy = OutTopics.defaultStrategy
     ).get
 
     val eventTopic = OutTopics.defaultStrategy(GroupEnv("zoom", Environment.Local)).event
 
     assert(eventTopic == "local.zoom.event")
+    val dummyEvent = """{"toto":"titi"}"""
+    EmbeddedKafka.publishStringMessageToKafka("local.zoom.event", dummyEvent)
 
-    val startedNewNode = ZoomEventSerde.fromJson[StartedNewNode](
-      new String(consumeFirstMessageFrom[Array[Byte]](eventTopic))
-    ).get
+    def getNextEvent() = {
+      new String(
+        consumeFirstMessageFrom[Array[Byte]](
+          eventTopic
+        )
+      )
+    }
 
+    val firstEvent = getNextEvent()
+
+    println(firstEvent)
+
+    assert(firstEvent != dummyEvent)
+
+    val startedNewNode = ZoomEvent.fromJson(firstEvent).get.asInstanceOf[StartedNewNode]
+
+    //println(new String(consumeFirstMessageFrom[Array[Byte]](eventTopic)))
     assert(startedNewNode.environment == Environment.Local)
     assert(startedNewNode.node_id == nc.nodeId)
 
     nc.stop()
 
-    val sn: StoppedNode = ZoomEventSerde.
-      fromJson[StoppedNode](
-        new String(
-          consumeFirstMessageFrom[Array[Byte]](
-            eventTopic
-          )
-        )
-      ).get
+    assert(getNextEvent() == dummyEvent)
+
+    val nextEvent = getNextEvent()
+    val sn: StoppedNode = ZoomEvent.fromJson(nextEvent).get.asInstanceOf[StoppedNode]
 
     assert(sn.node_id == nc.nodeId)
     //assert(sn.stop_inst > startedNewNode.startup_inst)

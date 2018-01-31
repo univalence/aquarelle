@@ -1,15 +1,16 @@
-package models
+package zoom
 
 import java.net.{ InetAddress, UnknownHostException }
 import java.time.Instant
 import java.util.UUID
 import java.util.UUID.fromString
 
-import models.Environment._
-import models.ZoomEventSerde.ToJson
-import models.macros._
+import zoom._
+import org.apache.kafka.common.header.Headers
 import shapeless.tag
 import shapeless.tag.@@
+import zoom.ZoomEventSerde.ToJson
+import zoom.Environment._
 //import utils.Utils._
 
 import scala.util.Try
@@ -210,6 +211,11 @@ case class EventMetadata(
 }
 
 object EventMetadata {
+
+  def fromHeaders(headers: Headers): Try[EventMetadata] = {
+    EventMetadata.fromStringMap(headers.toArray.map(h ⇒ h.key -> new String(h.value())).toMap)
+  }
+
   def fromStringMap(map: Map[String, String]): Try[EventMetadata] = {
     Try(EventMetadata(
       event_id = fromString(map("event_id")),
@@ -239,6 +245,11 @@ sealed trait ZoomEvent {
 }
 
 object ZoomEvent {
+
+  def fromJson(str: String): Try[ZoomEvent] = {
+    ZoomEventSerde.fromJson(str)
+  }
+
   def cleanIdPack(idPack: String): String = idPack.replace("Some(", "").replace(")", "")
 
   def toJson(e: ZoomEvent): ToJson = ZoomEventSerde.toJson(e)

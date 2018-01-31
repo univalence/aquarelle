@@ -4,19 +4,19 @@ import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
-import models.OutTopics.GroupEnv
 import net.manub.embeddedkafka.{ EmbeddedKafka, EmbeddedKafkaConfig }
 import org.apache.kafka.clients.producer.{ KafkaProducer, ProducerConfig, ProducerRecord }
 import org.apache.kafka.common.serialization.{ ByteArrayDeserializer, ByteArraySerializer, StringDeserializer, StringSerializer }
 import org.scalatest.{ BeforeAndAfterAll, FunSuite }
+import zoom._
+import utils.RandomizePostKafka
 
 import scala.util.Try
 
 object BuildInfoTest {
 
-  import zm.BuildInfoZoom._
-
   val buildInfo: BuildInfo = {
+    import zm.BuildInfoZoom._
 
     BuildInfo(
       name = name,
@@ -58,7 +58,7 @@ class StartedNewNodeTest extends FunSuite with EmbdedKafkaCustom with EmbeddedKa
 
     val inJson = ZoomEventSerde.toJson(startedNewNode)
 
-    assert(inJson.event_type == "models.StartedNewNode")
+    assert(inJson.event_type == "zoom.StartedNewNode")
 
     assert(inJson.payload.contains("StartedNewNode"))
 
@@ -66,14 +66,12 @@ class StartedNewNodeTest extends FunSuite with EmbdedKafkaCustom with EmbeddedKa
 
   }
 
-  ignore("Publish To Node") {
-
-    ???
+  test("Publish To Node") {
 
     implicit val buildInfo = BuildInfoTest.buildInfo
-    new NodeContext(environment = Environment.Local, kafkaConfiguration = testKafkaConfiguration)
+    //  implicit val nc = new NodeContext(environment = Environment.Local)
 
-    val fm = new String(consumeFirstMessageFrom[Array[Byte]]("data.event"))
+    //val fm = new String(consumeFirstMessageFrom[Array[Byte]]("data.event"))
     /*val fromJson = EventSerde.fromJson[StartedNewNode](fm)
 
     assert(fromJson.isSuccess)*/

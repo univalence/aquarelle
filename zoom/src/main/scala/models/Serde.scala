@@ -1,4 +1,4 @@
-package models
+package zoom
 
 import java.time.Instant
 import java.util.UUID
@@ -11,6 +11,7 @@ import io.circe.generic.extras.encoding._
 import io.circe.parser._
 import io.circe.syntax._
 import shapeless.the
+import zoom._
 
 /*
 import io.circe.generic.extras.decoding._
@@ -21,7 +22,7 @@ import io.circe.parser._
 import io.circe.syntax._
  */
 
-trait ProjectEncoderDecoder {
+trait ProjectEncoderDecoderZoom {
 
   implicit val encodeUUID: Encoder[UUID] = Encoder.encodeString.contramap[UUID](_.toString)
   implicit val encodeInstant: Encoder[Instant] = Encoder.encodeString.contramap[Instant](_.toString)
@@ -41,7 +42,7 @@ trait ProjectEncoderDecoder {
   //implicit val decodeToggleAction: Decoder[ToggleAction] = Decoder.decodeString.map[ToggleAction](ToggleAction.fromString)
 }
 
-object ZoomEventSerde extends ProjectEncoderDecoder {
+object ZoomEventSerde extends ProjectEncoderDecoderZoom {
 
   /*
   //in case of import optimization

@@ -1,12 +1,14 @@
-package toto
+package zoom.test
 
-import models.macros.Callsite
+import org.scalatest.FunSuite
+import zoom.Callsite
 
-object TestCallSite {
+class TestCallSite extends FunSuite {
 
-  def main(args: Array[String]): Unit = {
+  val callsite: Callsite = Callsite.callSite
 
-    println(Callsite.callSite)
+  test("hello callsite") {
 
+    assert(callsite.line == 8)
   }
 }

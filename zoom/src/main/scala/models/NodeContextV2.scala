@@ -1,19 +1,21 @@
-package models
+package zoom
 
 import java.nio.charset.Charset
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
-import models.OutTopics.GroupEnv
-import models.macros.Callsite
 import org.apache.kafka.clients.consumer.{ ConsumerConfig, KafkaConsumer }
 import org.apache.kafka.clients.producer._
 import org.apache.kafka.common.header.Header
 import org.apache.kafka.common.header.internals.RecordHeader
 import org.apache.kafka.common.serialization.{ ByteArrayDeserializer, ByteArraySerializer, StringDeserializer, StringSerializer }
+import zoom.OutTopics.GroupEnv
+import zoom._
 
 import scala.concurrent.{ Await, Future, Promise }
+import scala.language.postfixOps
+import scala.concurrent._
 import scala.util.Try
 
 case class OutTopics(log: String, event: String, raw: String)
@@ -55,6 +57,13 @@ trait NCSer[Event] {
 }
 
 object NCSer {
+
+  val empty: NCSer[Unit] = new NCSer[Unit] {
+    override def format: EventFormat = ???
+    override def eventType(event: Unit): String = ???
+    override def serialize(event: Unit): Array[Byte] = ???
+  }
+
   @deprecated(message = "to move in trafic garanti")
   val tgEventSerde: NCSer[ZoomEvent] = new NCSer[ZoomEvent] {
     override def serialize(event: ZoomEvent): Array[Byte] =
@@ -77,9 +86,10 @@ object NodeContextV2 {
     kafkaConfiguration: KafkaConfiguration,
     buildInfo:          BuildInfo,
     eventSer:           NCSer[Event],
-    topicStrategy:      OutTopics.Strategy = OutTopics.defaultStrategy,
-    zoomGroupName:      String             = "zoom"
+    topicStrategy:      OutTopics.Strategy = OutTopics.defaultStrategy
   ): Try[NodeContextV2[Event]] = {
+
+    val zoomGroupName: String = "zoom"
 
     new NodeContextV2[Event](group, environment, kafkaConfiguration, buildInfo, eventSer, topicStrategy, zoomGroupName).init
 
@@ -93,8 +103,11 @@ object CheckKafkaProducerConfiguration {
   def checkConfiguration(kafkaConfig: Map[String, Object]): Seq[ConfigurationIssue] = {
 
     if (kafkaConfig(ProducerConfig.MAX_BLOCK_MS_CONFIG).toString.toLong < kafkaConfig(ProducerConfig.RETRY_BACKOFF_MS_CONFIG).toString.toLong)
-      Seq(ConfigurationIssue("MAX_BLOCK < RETRY_BACKOFF", "MAX BLOCK should be greater than RETRY BACKOFF, else NodeContextV2 doesn't work on new topics",
-        isError = true))
+      Seq(ConfigurationIssue(
+        "MAX_BLOCK < RETRY_BACKOFF",
+        "MAX BLOCK should be greater than RETRY BACKOFF, else NodeContextV2 doesn't work on new topics",
+        isError = true
+      ))
     else Seq.empty
   }
 
@@ -150,7 +163,7 @@ final class NodeContextV2[Event] protected (
         checkConfiguration(baseProducerConfig).
         exists(_.isError))
       nodeElement.checkTopicExistanceAndLog()
-      checkTopicExistanceAndLog_!
+      checkTopicExistanceAndLog_!()
       nodeElement.start()
       isRunning = true
       this
@@ -165,12 +178,14 @@ final class NodeContextV2[Event] protected (
   def nodeId: UUID = nodeElement.nodeId
 
   private def checkTopicExistanceAndLog_!(): Unit = {
-    if (!isTopicCreated(groupOutTopics.log)) {
-      rootLog.warn(s"$group log topic does not exist")
+    val logTopic = groupOutTopics.log
+    if (!isTopicCreated(logTopic)) {
+      rootLogger.warn(s"$group log topic ($logTopic) does not exist")
     }
 
-    if (!isTopicCreated(groupOutTopics.event)) {
-      rootLog.warn(s"$group event topic does not exist")
+    val eventTopic = groupOutTopics.event
+    if (!isTopicCreated(eventTopic)) {
+      rootLogger.warn(s"$group event topic ($eventTopic) does not exist")
     }
   }
 
@@ -180,12 +195,14 @@ final class NodeContextV2[Event] protected (
     protected val nodeOutTopics: OutTopics = topicStrategy(GroupEnv("zoom", environment))
 
     def checkTopicExistanceAndLog(): Unit = {
-      if (!isTopicCreated(nodeElement.nodeOutTopics.log)) {
-        rootLog.warn("zoom log topic does not exist (and we are trying to log in it, why not)")
+      val logTopic = nodeElement.nodeOutTopics.log
+      if (!isTopicCreated(logTopic)) {
+        logger.warn(s"zoom log topic ($logTopic) does not exist (and we are trying to log in it, why not)")
       }
 
-      if (!isTopicCreated(nodeElement.nodeOutTopics.event)) {
-        rootLog.warn("zoom event topic does not exist (and we will use it in a couple of ms)")
+      val eventTopic = nodeElement.nodeOutTopics.event
+      if (!isTopicCreated(eventTopic)) {
+        logger.warn(s"zoom event topic ($eventTopic) does not exist (and we will use it in a couple of ms)")
       }
     }
 
@@ -238,24 +255,31 @@ final class NodeContextV2[Event] protected (
           callsite = implicitly[Callsite]
         )
         isRunning = false
+      } else {
+        throw new Exception("node context already stopped")
       }
 
     }
 
-    val logger = new NodeLogger with LoggerImplWithCtx[Callsite] {
-      override def log(message: ⇒ String, level: String)(implicit context: Callsite): Unit = {
-        implicit val t = nodeTracingContext
-
-        println(level + ":" + message)
-        publishLow(
-          topic = nodeOutTopics.log,
-          content = message.getBytes(UTF8_CHARSET),
-          format = EventFormat.Raw,
-          eventType = s"logs/$level" + this.getClass.getName,
-          tracing = nodeTracingContext,
-          callsite = implicitly[Callsite]
-        )
+    @deprecated
+    val logger = new NodeLogger with LoggerWithCtx[Callsite] {
+      override def log(message: ⇒ String, level: Level)(implicit context: Callsite): Unit = {
+        logF(message, level)
       }
+    }
+
+    def logF(message: ⇒ String, level: Level)(implicit callsite: Callsite) = {
+      implicit val t = nodeTracingContext
+
+      println(level + ":" + message)
+      publishLow(
+        topic = nodeOutTopics.log,
+        content = message.getBytes(UTF8_CHARSET),
+        format = EventFormat.Raw,
+        eventType = s"logs/$level" + this.getClass.getName,
+        tracing = nodeTracingContext,
+        callsite = implicitly[Callsite]
+      )
     }
   }
 
@@ -263,6 +287,9 @@ final class NodeContextV2[Event] protected (
 
     nodeElement.stop()
   }
+
+  @deprecated("use publishEvent")
+  def saveEvent(event: Event)(implicit tracing: Tracing, callsite: Callsite): Future[Unit] = publishEvent(event)
 
   def publishEvent(event: Event)(implicit tracing: Tracing, callsite: Callsite): Future[Unit] = {
 
@@ -325,23 +352,87 @@ final class NodeContextV2[Event] protected (
 
   }
 
-  def getLogger(logClass: Class[_]): Logger = new LoggerImplWithCtx[TracingAndCallSite] with Logger {
-    override def log(
-      message: ⇒ String,
-      level:   String
-    )(implicit context: TracingAndCallSite): Unit = {
-
-      publishLow(
-        topic = groupOutTopics.log,
-        content = message.getBytes(UTF8_CHARSET),
-        format = EventFormat.Raw,
-        eventType = s"logs/$level/" + logClass.getName,
-        tracing = context.tracing,
-        callsite = context.callsite
-      )
+  def logger: Logger = {
+    new LoggerWithCtx[TracingAndCallSite] with Logger {
+      override def log(message: ⇒ String, level: Level)(implicit context: TracingAndCallSite): Unit = {
+        logImpl(message, level)
+      }
     }
   }
 
-  def rootLog: NodeLogger = nodeElement.logger
+  private def logImpl(message: ⇒ String, level: Level)(implicit context: TracingAndCallSite) = {
+    publishLow(
+      topic = groupOutTopics.log,
+      content = message.getBytes(UTF8_CHARSET),
+      format = EventFormat.Raw,
+      eventType = s"logs/${level.toString}/" + context.callsite.enclosingClass,
+      tracing = context.tracing,
+      callsite = context.callsite
+    )
+  }
+
+  @deprecated(message = "use @trace instead")
+  def getLogger(logClass: Class[_]): Logger = logger
+
+  private def rootLogger: NodeLogger = nodeElement.logger
+
+  @deprecated(message = "use @global_log_no_tracing instead")
+  def useRootLogger(really_? :IamLoggingWithoutTracing.type): NodeLogger = nodeElement.logger
+
+  def kafkaBrokers: String = kafkaConfiguration.kafkaBrokers
+
+  def global_log_no_tracing(message: ⇒ String, level: Level)(implicit callsite: Callsite): Unit = {
+    nodeElement.logF(message, level)
+  }
+
+  //TODO MACROS ? // SCALA 2.12 ?
+  def trace[T](block: TraceEffect[Event] ⇒ T): T = {
+
+    //NAIVE IMPL
+    implicit val tracing = Tracing()
+    val nc = this
+
+    block(new TraceEffect[Event] {
+      override def log: TraceLogger = new TraceLogger {
+        override protected def log(message: ⇒ String, level: Level)(implicit context: Callsite): Unit = {
+          val msg = message
+          println(s"${level.toString} at  ${context.file}:${context.line}  $msg ")
+          nc.logImpl(msg, level)
+        }
+      }
+
+      override def publishEvent(event: Event)(implicit callsite: Callsite): Unit = {
+        nc.publishEvent(event)
+      }
+
+      override def publishRaw(content: Array[Byte], format: EventFormat, eventType: String)(implicit callsite: Callsite): Unit = {
+        nc.publishRaw(content, format, eventType)
+      }
+    })
+  }
 }
+
+trait TraceEffect[E] {
+  def publishEvent(event: E)(implicit callsite: Callsite): Unit
+  def publishRaw(
+    content:   Array[Byte],
+    format:    EventFormat,
+    eventType: String
+  )(implicit callsite: Callsite)
+
+  def log: TraceLogger
+}
+
+sealed trait Level
+
+object Level {
+  case object Debug extends Level
+  case object Info extends Level
+  case object Warn extends Level
+  case object Error extends Level
+  case object Fatal extends Level
+}
+
+@deprecated
+object IamLoggingWithoutTracing
 

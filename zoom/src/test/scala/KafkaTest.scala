@@ -2,7 +2,7 @@ package models
 
 import java.util.{ Properties, UUID }
 
-import models.macros.Callsite
+import zoom._
 import net.manub.embeddedkafka.{ EmbeddedKafka, EmbeddedKafkaConfig, KafkaUnavailableException }
 import org.apache.kafka.clients.consumer.{ KafkaConsumer, OffsetAndMetadata }
 import org.apache.kafka.clients.producer.{ KafkaProducer, ProducerConfig, ProducerRecord }
@@ -16,6 +16,7 @@ import scala.collection.mutable.ListBuffer
 import scala.concurrent.TimeoutException
 import scala.concurrent.duration.SECONDS
 import scala.util.Try
+import utils.RandomizePostKafka
 
 class KafkaTest extends FunSuite with EmbdedKafkaCustom with EmbeddedKafka with BeforeAndAfterAll {
 

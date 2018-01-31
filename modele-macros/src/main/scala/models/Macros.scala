@@ -1,4 +1,4 @@
-package models.macros
+package zoom
 
 import scala.reflect.macros.Context
 
@@ -34,7 +34,7 @@ object CallSiteMacro {
       Callsite(
         literal(enclosingClass.symbol.fullName).splice,
         method.splice,
-        literal(enclosingPosition.source.file.name).splice,
+        literal(enclosingPosition.source.file.absolute.path).splice,
         literal(enclosingPosition.line).splice
       )
     }

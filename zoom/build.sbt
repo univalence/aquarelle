@@ -11,7 +11,9 @@ val circeVersion = "0.8.0"
 val scalaTestV = "3.0.1"
 
 lazy val macros = RootProject(file("../modele-macros"))
-val main = Project(id = "zoom", base = file(".")).dependsOn(macros)
+
+lazy val main = Project(id = "zoom", base = file(".")).
+  dependsOn(macros)
 
 //Circe
 libraryDependencies ++= Seq(
@@ -29,7 +31,7 @@ libraryDependencies ++= Seq(
   "org.apache.kafka" % "kafka_2.11" % "0.11.0.0",
 
   //EmbeddedKafka
-  "net.manub" %% "scalatest-embedded-kafka" % "0.15.1" % "test",
+  "net.manub" %% "scalatest-embedded-kafka" % "0.15.1",
 
   //Test
   "org.scalatest" %% "scalatest" % scalaTestV % Test,

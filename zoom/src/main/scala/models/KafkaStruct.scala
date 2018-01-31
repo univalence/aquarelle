@@ -1,4 +1,4 @@
-package models
+package zoom
 
 import org.apache.kafka.clients.consumer.{ ConsumerRecord, ConsumerRecords }
 import scala.collection.JavaConverters._
